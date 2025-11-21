@@ -1,0 +1,17 @@
+{
+  "name": "We-Band-BackEnd",
+  "packageManager": "yarn@4.11.0",
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "@types/node": "^24.10.1",
+    "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "scripts": {
+    "dev": "ts-node src/index.ts"
+  }
+}
