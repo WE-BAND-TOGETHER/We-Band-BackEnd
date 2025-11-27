@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": false,
+        "amount": 2
+    },
+    "auditLog": "/Users/jinseo/Desktop/We-Band-BackEnd/logs/.01ad27d07cda8d68a677d3ea60732acb92c913b1-audit.json",
+    "files": [
+        {
+            "date": 1764259179901,
+            "name": "/Users/jinseo/Desktop/We-Band-BackEnd/logs/application-2025-48.log",
+            "hash": "3d90e1507f06d596dafcd2cf0e48fdb6a91143dc7f5be8088196acf3db300577"
+        }
+    ],
+    "hashType": "sha256"
+}
