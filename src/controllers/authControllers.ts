@@ -1,7 +1,7 @@
 import { PrismaClient } from '../generated/prisma';
-import { generateAccessToken, generateRefreshToken } from '../services/jwtServices';
+import { generateAccessToken, generateRefreshToken } from '../services/jwtServices.js';
 import axios from 'axios';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/logger.js';
 import { Request, Response } from 'express';
 
 const prisma = new PrismaClient();
