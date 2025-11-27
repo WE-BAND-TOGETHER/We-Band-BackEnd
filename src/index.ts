@@ -1,4 +1,4 @@
-import authRoutes from './routes/authRoutes';
+import authRoutes from './routes/authRoutes.js';
 import express from 'express';
 import { prisma } from './prisma';
 import cookieParser from 'cookie-parser';
