@@ -2,17 +2,32 @@
   "name": "We-Band-BackEnd",
   "packageManager": "yarn@4.11.0",
   "devDependencies": {
+    "@types/app-root-path": "^3.1.0",
+    "@types/axios": "^0.14.4",
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.5",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
     "@types/node": "^24.10.1",
     "prettier": "^3.6.2",
+    "prisma": "5.16.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "express": "^5.1.0"
+    "@prisma/client": "5.16.1",
+    "app-root-path": "^3.1.0",
+    "axios": "^1.13.2",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "jsonwebtoken": "8",
+    "morgan": "^1.10.1",
+    "winston": "^3.18.3",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "scripts": {
-    "dev": "ts-node src/index.ts",
+    "dev": "ts-node -r dotenv/config src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   }

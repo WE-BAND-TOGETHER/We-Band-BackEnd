@@ -1,0 +1,17 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model weBandUser {
+  user_id     Int      @id @default(autoincrement())
+  kakao_id    BigInt
+  email       String   @unique
+  user_name   String
+  profile_img String?
+}
