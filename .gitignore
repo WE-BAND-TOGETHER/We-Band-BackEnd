@@ -16,4 +16,9 @@ node_modules
 #!.yarn/cache
 .pnp.*
 
+# Prisma generated client
 /src/generated/prisma
+
+# environment variables (🔥 추가)
+.env
+.env.*

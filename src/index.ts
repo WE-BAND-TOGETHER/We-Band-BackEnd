@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
+import calendarRoutes from './routes/calendarRoutes';
 import { prisma } from './prisma';
 
 const app = express();
@@ -18,13 +19,16 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-// Auth
+// auth
 app.use('/auth', authRoutes);
 
-// Me API
+// me API
 app.use('/me', userRoutes);
 
-// Root
+// calender API
+app.use('/calendar', calendarRoutes);
+
+// root
 app.get('/', (req, res) => {
   res.send('Hello from Express + Prisma + RDS!');
 });

@@ -6,9 +6,9 @@
     "auditLog": "/Users/jinseo/Desktop/We-Band-BackEnd/logs/.e515d4c77b7614fd427fb57d03c694bdc4df732c-audit.json",
     "files": [
         {
-            "date": 1764259179902,
-            "name": "/Users/jinseo/Desktop/We-Band-BackEnd/logs/specific-2025-11.log",
-            "hash": "efa49d1a651068ca4ed4fee47437520c3f057b09519483003f066db8917f8a59"
+            "date": 1765641974029,
+            "name": "/Users/jinseo/Desktop/We-Band-BackEnd/logs/specific-2025-12.log",
+            "hash": "ba5b241582cda3e211afc0f386394c3a4b691025545b2cf0550e028c9c1fd17f"
         }
     ],
     "hashType": "sha256"
