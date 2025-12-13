@@ -15,3 +15,29 @@ model weBandUser {
   user_name   String
   profile_img String?
 }
+
+model group {
+  group_id   Int      @id @default(autoincrement())
+  group_name String
+  group_date DateTime @db.Date
+  owner_id   Int
+
+  @@map("group")
+}
+
+model member {
+  group_id Int
+  user_id  Int
+
+  @@id([group_id, user_id])
+  @@map("member")
+}
+
+model schedule {
+  date       DateTime @db.Date
+  user_id    Int
+  block_data Bytes
+
+  @@id([date, user_id])
+  @@map("schedule")
+}

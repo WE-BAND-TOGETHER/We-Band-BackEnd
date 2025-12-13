@@ -6,7 +6,7 @@ import {
   redirectToKakaoLogin,
   logout,
   withdraw,
-} from '../controllers/authControllers.js';
+} from '../controllers/authControllers';
 
 const router = Router();
 
