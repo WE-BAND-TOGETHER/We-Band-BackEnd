@@ -1,8 +1,10 @@
-import authRoutes from './routes/authRoutes';
 import express from 'express';
-import { prisma } from './prisma';
-import cookieParser from 'cookie-parser';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
+
+import authRoutes from './routes/authRoutes';
+import userRoutes from './routes/userRoutes';
+import { prisma } from './prisma';
 
 const app = express();
 
@@ -16,12 +18,18 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+// Auth
 app.use('/auth', authRoutes);
 
+// Me API
+app.use('/me', userRoutes);
+
+// Root
 app.get('/', (req, res) => {
   res.send('Hello from Express + Prisma + RDS!');
 });
 
+// DB Test
 app.get('/test-db', async (req, res) => {
   try {
     const now = await prisma.$queryRaw`SELECT NOW()`;
