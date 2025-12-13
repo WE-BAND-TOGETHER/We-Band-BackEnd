@@ -1,7 +1,8 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { logger } from '../utils/logger';
+import { AuthRequest } from '../types/authRequest';
 
-export const getMyInfo = async (req: Request, res: Response) => {
+export const getMyInfo = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
       return res.status(400).json({

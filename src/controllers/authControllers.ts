@@ -2,6 +2,7 @@ import { prisma } from '../prisma';
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { Request, Response } from 'express';
+import { AuthRequest } from '../types/authRequest';
 import { generateAccessToken, generateRefreshToken } from '../services/jwtServices';
 
 // ❌ (절대 쓰면 안됨) const prisma = new PrismaClient();
@@ -130,7 +131,7 @@ export const handleKakaoUser = async (req: Request, res: Response) => {
   }
 };
 
-export const logout = async (req: Request, res: Response) => {
+export const logout = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
       return res.status(400).json({ message: '로그인 상태가 아닙니다.' });
@@ -151,7 +152,7 @@ export const logout = async (req: Request, res: Response) => {
   }
 };
 
-export const withdraw = async (req: Request, res: Response) => {
+export const withdraw = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
       return res.status(400).json({ message: '로그인 상태가 아닙니다.' });
