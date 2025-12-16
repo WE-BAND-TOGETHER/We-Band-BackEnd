@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '../generated/prisma';
+import { PrismaClient } from '@prisma/client';
 import { refreshAccessToken } from '../services/jwtServices';
 import { logger } from '../utils/logger';
 import { AuthRequest } from '../types/authRequest';
