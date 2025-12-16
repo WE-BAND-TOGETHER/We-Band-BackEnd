@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import { Request, Response } from 'express';
 import { AuthRequest } from '../types/authRequest';
 import { generateAccessToken, generateRefreshToken } from '../services/jwtServices';
+import qs from 'qs';
 
 // 카카오 로그인 페이지로 리디렉션
 export const redirectToKakaoLogin = (req: Request, res: Response) => {
@@ -24,16 +25,18 @@ export const kakaoLogin = async (req: Request, res: Response) => {
 
     const redirectUri = process.env.REDIRECT_URI!;
 
-    // 1️⃣ 카카오 Access Token 요청
+    // 1️⃣ 카카오 Access Token 요청 (🔥 수정됨)
     const tokenRes = await axios.post(
       'https://kauth.kakao.com/oauth/token',
-      {},
+      qs.stringify({
+        grant_type: 'authorization_code',
+        client_id: process.env.REST_API_KEY,
+        redirect_uri: redirectUri,
+        code,
+      }),
       {
-        params: {
-          grant_type: 'authorization_code',
-          client_id: process.env.REST_API_KEY,
-          redirect_uri: redirectUri,
-          code,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
         },
       },
     );
@@ -99,7 +102,10 @@ export const kakaoLogin = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    logger.error('카카오 로그인 실패:', error.response?.data || error.message);
+    logger.error(
+      '카카오 로그인 실패',
+      JSON.stringify(error.response?.data || error.message, null, 2),
+    );
     return res.status(500).json({ message: '카카오 로그인 실패' });
   }
 };
