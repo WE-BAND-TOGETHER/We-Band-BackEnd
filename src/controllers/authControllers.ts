@@ -110,6 +110,28 @@ export const kakaoLogin = async (req: Request, res: Response) => {
   }
 };
 
+// 로그아웃
+export const logout = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(400).json({ message: '로그인 상태가 아닙니다.' });
+    }
+
+    res.cookie('refreshToken', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV !== 'dev',
+      sameSite: 'none',
+      expires: new Date(0),
+    });
+
+    logger.info(`로그아웃 완료: ${req.user.email}`);
+    return res.status(200).json({ message: '로그아웃 성공' });
+  } catch (error: any) {
+    logger.error('로그아웃 실패:', error.message);
+    return res.status(500).json({ message: '로그아웃 실패' });
+  }
+};
+
 // 회원 탈퇴
 export const withdraw = async (req: AuthRequest, res: Response) => {
   try {
