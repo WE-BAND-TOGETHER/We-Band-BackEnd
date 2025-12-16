@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../prisma';
 import { logger } from '../utils/logger';
 import { AuthRequest } from '../types/authRequest';
+import { Prisma } from '@prisma/client';
 
 /**
  * BINARY(4) → blocks[30]
@@ -61,7 +62,7 @@ export const createMeet = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: 'groupDate 형식이 올바르지 않습니다.' });
     }
 
-    const created = await prisma.$transaction(async (tx) => {
+    const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const group = await tx.group.create({
         data: {
           group_name: groupName.trim(),
@@ -112,7 +113,7 @@ export const getMyMeets = async (req: AuthRequest, res: Response) => {
       select: { group_id: true },
     });
 
-    const groupIds = memberships.map((m) => m.group_id);
+    const groupIds = memberships.map((m: { group_id: number }) => m.group_id);
     if (groupIds.length === 0) {
       return res.status(200).json({ meets: [] }); // 가입된 모임 없음
     }
@@ -128,16 +129,23 @@ export const getMyMeets = async (req: AuthRequest, res: Response) => {
       where: { group_id: { in: groupIds } },
       _count: { _all: true },
     });
-    const countMap = new Map(counts.map((c) => [c.group_id, c._count._all]));
+    const countMap = new Map(
+      counts.map((c: { group_id: number; _count: { _all: number } }) => [
+        c.group_id,
+        c._count._all,
+      ]),
+    );
     // countMap.get(group_id) = > 멤버 수 출력
     return res.status(200).json({
-      meets: groups.map((g) => ({
-        groupId: g.group_id,
-        groupName: g.group_name,
-        groupDate: g.group_date.toISOString().split('T')[0],
-        ownerId: g.owner_id,
-        memberCount: countMap.get(g.group_id) ?? 0,
-      })),
+      meets: groups.map(
+        (g: { group_id: number; group_name: string; group_date: Date; owner_id: number }) => ({
+          groupId: g.group_id,
+          groupName: g.group_name,
+          groupDate: g.group_date.toISOString().split('T')[0],
+          ownerId: g.owner_id,
+          memberCount: countMap.get(g.group_id) ?? 0,
+        }),
+      ),
     });
   } catch (error: any) {
     logger.error('내 모임 목록 조회 실패: ' + error.message);
@@ -234,7 +242,7 @@ export const getMeetDetail = async (req: AuthRequest, res: Response) => {
       where: { group_id: meetId },
       select: { user_id: true },
     });
-    const memberIds = members.map((m) => m.user_id);
+    const memberIds = members.map((m: { user_id: number }) => m.user_id);
 
     const users = await prisma.weBandUser.findMany({
       where: { user_id: { in: memberIds } },
@@ -284,7 +292,7 @@ export const getMeetDetail = async (req: AuthRequest, res: Response) => {
       weekly = {
         startDate: startDate.toISOString().split('T')[0],
         days,
-        members: memberIds.map((uid) => ({
+        members: memberIds.map((uid: number) => ({
           userId: uid,
           days: days.map((dateStr) => ({
             date: dateStr,
@@ -301,12 +309,14 @@ export const getMeetDetail = async (req: AuthRequest, res: Response) => {
         groupDate: group.group_date.toISOString().split('T')[0],
         ownerId: group.owner_id,
       },
-      members: users.map((u) => ({
-        userId: u.user_id,
-        name: u.user_name,
-        email: u.email,
-        profileImg: u.profile_img,
-      })),
+      members: users.map(
+        (u: { user_id: number; user_name: string; email: string; profile_img: string | null }) => ({
+          userId: u.user_id,
+          name: u.user_name,
+          email: u.email,
+          profileImg: u.profile_img,
+        }),
+      ),
       weeklySchedule: weekly, // day 없으면 null
     });
   } catch (error: any) {
@@ -401,7 +411,7 @@ export const deleteMeet = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ message: '모임 삭제 권한이 없습니다.' });
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.member.deleteMany({ where: { group_id: meetId } });
       await tx.group.delete({ where: { group_id: meetId } });
     });
