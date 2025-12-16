@@ -1,7 +1,7 @@
 import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
 // 🚨 [핵심 수정]: Prisma Client 생성 경로를 '../generated/prisma'로 변경
 // (src/services 폴더에서 src/generated 폴더를 바라보는 상대 경로)
-import { PrismaClient } from '../generated/prisma';
+import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
