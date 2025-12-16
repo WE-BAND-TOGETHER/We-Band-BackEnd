@@ -12,7 +12,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: ['http://localhost:3000', 'https://we-band.com', 'http://3.34.220.185'],
+    origin: true, // ← 요청 Origin 그대로 허용
     credentials: true,
   }),
 );
