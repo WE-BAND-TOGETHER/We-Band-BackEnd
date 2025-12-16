@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import calendarRoutes from './routes/calendarRoutes';
+import meetRoutes from './routes/meetRoutes';
 import { prisma } from './prisma';
 
 const app = express();
@@ -27,6 +28,9 @@ app.use('/me', userRoutes);
 
 // calender API
 app.use('/calendar', calendarRoutes);
+
+// meet API
+app.use('/meets', meetRoutes);
 
 // root
 app.get('/', (req, res) => {
