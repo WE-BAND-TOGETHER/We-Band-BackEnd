@@ -63,27 +63,14 @@ export const createMeet = async (req: AuthRequest, res: Response) => {
     }
 
     const created = await prisma.$transaction(async (tx) => {
-      // 🔹 1. 랜덤 groupId 생성 (중복 방지)
-      let groupId: number;
-      while (true) {
-        groupId = Math.floor(100000 + Math.random() * 900000);
-        const exists = await tx.group.findUnique({
-          where: { group_id: groupId },
-        });
-        if (!exists) break;
-      }
-
-      // 🔹 2. group 생성
       const group = await tx.group.create({
         data: {
-          group_id: groupId, // ⭐ 핵심
           group_name: groupName.trim(),
           group_date: date,
           owner_id: req.user!.user_id,
         },
       });
 
-      // 🔹 3. 생성자 자동 가입
       await tx.member.create({
         data: {
           group_id: group.group_id,
@@ -108,7 +95,6 @@ export const createMeet = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ message: '모임 생성 중 오류가 발생했습니다.' });
   }
 };
-
 
 /**
  * GET /meets
@@ -210,7 +196,9 @@ export const joinMeet = async (req: AuthRequest, res: Response) => {
 /**
  * GET /meets/:meetId
  * meet + members (+ schedules) 조합해서 내려주는 핵심
- * 모임 정보조회
+ *
+ * 옵션(권장):
+ * - ?day=YYYY-MM-DD  : 해당 주(일~토) 기준으로 멤버별 스케줄 blocks 내려줌
  */
 export const getMeetDetail = async (req: AuthRequest, res: Response) => {
   try {
@@ -223,13 +211,7 @@ export const getMeetDetail = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: 'meetId 형식이 올바르지 않습니다.' });
     }
 
-    // 1) 모임 조회
-    const meet = await prisma.group.findUnique({ where: { group_id: meetId } });
-    if (!meet) {
-      return res.status(404).json({ message: '존재하지 않는 모임입니다.' });
-    }
-
-    // 2) 가입 여부(참/거짓만)
+    // 가입 여부 체크
     const membership = await prisma.member.findUnique({
       where: {
         group_id_user_id: {
@@ -238,100 +220,100 @@ export const getMeetDetail = async (req: AuthRequest, res: Response) => {
         },
       },
     });
-    const participate = !!membership;
 
-    // 3) 멤버 목록(모든 사용자에게 공개)
-    const memberRows = await prisma.member.findMany({
+    if (!membership) {
+      return res.status(403).json({ message: '해당 모임에 가입되어 있지 않습니다.' });
+    }
+
+    const group = await prisma.group.findUnique({ where: { group_id: meetId } });
+    if (!group) {
+      return res.status(404).json({ message: '해당 모임을 찾을 수 없습니다.' });
+    }
+
+    const members = await prisma.member.findMany({
       where: { group_id: meetId },
       select: { user_id: true },
     });
-    const memberUserIds = memberRows.map((m) => m.user_id);
+    const memberIds = members.map((m) => m.user_id);
 
-    // 멤버가 없으면
-    if (memberUserIds.length === 0) {
-      return res.status(200).json({
-        meetId: meet.group_id,
-        meetName: meet.group_name,
-        startDate: meet.group_date.toISOString().split('T')[0],
-        participate,
-        member: [],
-      });
-    }
-
-    // 4) startDate부터 7일 날짜 배열 생성
-    const startDateObj = new Date(meet.group_date);
-    // 날짜만 쓰기 위해 시간 00:00 정규화(타임존 이슈 완화)
-    startDateObj.setHours(0, 0, 0, 0);
-
-    const dates: Date[] = [];
-    const dateStrs: string[] = [];
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(startDateObj);
-      d.setDate(startDateObj.getDate() + i);
-      dates.push(d);
-      dateStrs.push(d.toISOString().split('T')[0]);
-    }
-
-    const endDateObj = new Date(dates[6]);
-    endDateObj.setHours(23, 59, 59, 999);
-
-    // 5) 7일 범위 스케줄 조회(멤버 전원)
-    const schedules = await prisma.schedule.findMany({
-      where: {
-        user_id: { in: memberUserIds },
-        date: { gte: startDateObj, lte: endDateObj },
-      },
-      select: { user_id: true, date: true, block_data: true },
-    });
-
-    // userId -> dateStr -> blocks(0/1 30개)
-    const scheduleMap = new Map<number, Map<string, number[]>>();
-    for (const s of schedules) {
-      const dateStr = s.date.toISOString().split('T')[0];
-      const blocks = binaryToBlocks(s.block_data as Buffer);
-      if (!scheduleMap.has(s.user_id)) scheduleMap.set(s.user_id, new Map());
-      scheduleMap.get(s.user_id)!.set(dateStr, blocks);
-    }
-
-    // 6) 유저 이름 조회 (memberName에 필요)
     const users = await prisma.weBandUser.findMany({
-      where: { user_id: { in: memberUserIds } },
-      select: { user_id: true, user_name: true },
+      where: { user_id: { in: memberIds } },
+      select: { user_id: true, user_name: true, email: true, profile_img: true },
     });
 
-    // userId -> name
-    const nameMap = new Map<number, string>();
-    for (const u of users) {
-      nameMap.set(u.user_id, u.user_name);
-    }
+    // (선택) 주간 스케줄까지 내려주기
+    const day = req.query.day as string | undefined;
+    let weekly: any = null;
 
-    // 7) 응답 스펙에 맞게 member 배열 구성
-    const member = memberUserIds.map((userId) => {
-      return {
-        memberName: nameMap.get(userId) ?? `USER_${userId}`,
-        days: dateStrs.map((dateStr) => ({
-          date: dateStr,
-          blocks: scheduleMap.get(userId)?.get(dateStr) ?? new Array(30).fill(0),
+    if (day) {
+      const baseDate = new Date(day);
+      if (isNaN(baseDate.getTime())) {
+        return res.status(400).json({ message: 'day 형식이 올바르지 않습니다.' });
+      }
+
+      const startDate = new Date(baseDate);
+      startDate.setDate(baseDate.getDate() - baseDate.getDay());
+
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+
+      const schedules = await prisma.schedule.findMany({
+        where: {
+          user_id: { in: memberIds },
+          date: { gte: startDate, lte: endDate },
+        },
+        select: { user_id: true, date: true, block_data: true },
+      });
+
+      // userId -> (dateStr -> blocks)
+      const map = new Map<number, Map<string, number[]>>();
+      for (const s of schedules) {
+        const dateStr = s.date.toISOString().split('T')[0];
+        const blocks = binaryToBlocks(s.block_data as Buffer);
+        if (!map.has(s.user_id)) map.set(s.user_id, new Map());
+        map.get(s.user_id)!.set(dateStr, blocks);
+      }
+
+      const days: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
+        days.push(d.toISOString().split('T')[0]);
+      }
+
+      weekly = {
+        startDate: startDate.toISOString().split('T')[0],
+        days,
+        members: memberIds.map((uid) => ({
+          userId: uid,
+          days: days.map((dateStr) => ({
+            date: dateStr,
+            blocks: map.get(uid)?.get(dateStr) ?? new Array(30).fill(0),
+          })),
         })),
       };
-    });
+    }
 
-    // 8) 최종 응답
     return res.status(200).json({
-      meetId: meet.group_id,
-      meetName: meet.group_name,
-      startDate: startDateObj.toISOString().split('T')[0],
-      participate,
-      member,
+      meet: {
+        groupId: group.group_id,
+        groupName: group.group_name,
+        groupDate: group.group_date.toISOString().split('T')[0],
+        ownerId: group.owner_id,
+      },
+      members: users.map((u) => ({
+        userId: u.user_id,
+        name: u.user_name,
+        email: u.email,
+        profileImg: u.profile_img,
+      })),
+      weeklySchedule: weekly, // day 없으면 null
     });
   } catch (error: any) {
     logger.error('모임 상세 조회 실패: ' + error.message);
     return res.status(500).json({ message: '모임 상세 조회 중 오류가 발생했습니다.' });
   }
 };
-
-
 
 /**
  * PATCH /meets/:meetId
