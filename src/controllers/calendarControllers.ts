@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../prisma';
 import { logger } from '../utils/logger';
 import { AuthRequest } from '../types/authRequest';
+import { Prisma } from '@prisma/client';
 
 /**
  * BINARY(4) → blocks[30]
@@ -42,12 +43,10 @@ const blocksToBinary = (blocks: number[]): Buffer => {
 export const getWeeklyCalendar = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(400).json({
-        message: '인증에 실패했습니다. 다시 로그인해주세요.',
-      });
+      return res.status(400).json({ message: '인증 실패' });
     }
 
-    const day = req.query.day as string;
+    const day = req.query.day as string | undefined;
     if (!day) {
       return res.status(400).json({ message: 'day 파라미터가 필요합니다.' });
     }
@@ -66,16 +65,18 @@ export const getWeeklyCalendar = async (req: AuthRequest, res: Response) => {
     const schedules = await prisma.schedule.findMany({
       where: {
         user_id: req.user.user_id,
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+        date: { gte: startDate, lte: endDate },
       },
     });
 
-    const scheduleMap = new Map(schedules.map((s) => [s.date.toISOString().split('T')[0], s]));
+    type ScheduleRow = (typeof schedules)[number];
 
-    const days = [];
+    const scheduleMap = new Map<string, ScheduleRow>(
+      schedules.map((s: ScheduleRow) => [s.date.toISOString().split('T')[0], s]),
+    );
+
+    const days: { date: string; blocks: number[] }[] = [];
+
     for (let i = 0; i < 7; i++) {
       const current = new Date(startDate);
       current.setDate(startDate.getDate() + i);
@@ -85,7 +86,7 @@ export const getWeeklyCalendar = async (req: AuthRequest, res: Response) => {
 
       days.push({
         date: dateStr,
-        blocks: schedule ? binaryToBlocks(schedule.block_data as Buffer) : new Array(30).fill(0),
+        blocks: schedule ? binaryToBlocks(schedule.block_data) : new Array(30).fill(0),
       });
     }
 
@@ -93,11 +94,9 @@ export const getWeeklyCalendar = async (req: AuthRequest, res: Response) => {
       startDate: startDate.toISOString().split('T')[0],
       days,
     });
-  } catch (error: any) {
-    logger.error('주간 일정 조회 실패: ' + error.message);
-    return res.status(500).json({
-      message: '주간 일정 조회 중 오류가 발생했습니다.',
-    });
+  } catch (error) {
+    logger.error('주간 일정 조회 실패', error);
+    return res.status(500).json({ message: '주간 일정 조회 실패' });
   }
 };
 
@@ -108,45 +107,35 @@ export const getWeeklyCalendar = async (req: AuthRequest, res: Response) => {
 export const saveWeeklyCalendar = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(400).json({
-        message: '주간 일정 저장 요청 형식이 올바르지 않습니다.',
-      });
+      return res.status(400).json({ message: '인증 실패' });
     }
 
-    const day = req.query.day as string;
-    const { days } = req.body;
+    const day = req.query.day as string | undefined;
+    const days = req.body.days as { date: string; blocks: number[] }[];
 
     if (!day || !Array.isArray(days) || days.length !== 7) {
-      return res.status(400).json({
-        message: '주간 일정 저장 요청 형식이 올바르지 않습니다.',
-      });
+      return res.status(400).json({ message: '요청 형식이 올바르지 않습니다.' });
     }
 
     const baseDate = new Date(day);
     if (isNaN(baseDate.getTime())) {
-      return res.status(400).json({
-        message: '주간 일정 저장 요청 형식이 올바르지 않습니다.',
-      });
+      return res.status(400).json({ message: 'day 형식이 올바르지 않습니다.' });
     }
 
     const startDate = new Date(baseDate);
     startDate.setDate(baseDate.getDate() - baseDate.getDay());
 
-    const operations = [];
+    const operations: Prisma.PrismaPromise<any>[] = [];
 
     for (let i = 0; i < 7; i++) {
       const targetDate = new Date(startDate);
       targetDate.setDate(startDate.getDate() + i);
       const dateStr = targetDate.toISOString().split('T')[0];
 
-      const dayData = days.find((d: any) => d.date === dateStr);
-      if (!dayData || !Array.isArray(dayData.blocks) || dayData.blocks.length !== 30) {
-        return res.status(400).json({
-          message: '주간 일정 저장 요청 형식이 올바르지 않습니다.',
-        });
+      const dayData = days.find((d) => d.date === dateStr);
+      if (!dayData || dayData.blocks.length !== 30) {
+        return res.status(400).json({ message: 'blocks 형식 오류' });
       }
-
-      const binary = blocksToBinary(dayData.blocks);
 
       operations.push(
         prisma.schedule.upsert({
@@ -157,12 +146,12 @@ export const saveWeeklyCalendar = async (req: AuthRequest, res: Response) => {
             },
           },
           update: {
-            block_data: binary,
+            block_data: blocksToBinary(dayData.blocks),
           },
           create: {
             date: targetDate,
             user_id: req.user.user_id,
-            block_data: binary,
+            block_data: blocksToBinary(dayData.blocks),
           },
         }),
       );
@@ -171,13 +160,11 @@ export const saveWeeklyCalendar = async (req: AuthRequest, res: Response) => {
     await prisma.$transaction(operations);
 
     return res.status(200).json({
-      message: '개인 주간 일정이 성공적으로 저장되었습니다.',
+      message: '개인 주간 일정이 저장되었습니다.',
       startDate: startDate.toISOString().split('T')[0],
     });
-  } catch (error: any) {
-    logger.error('주간 일정 저장 실패: ' + error.message);
-    return res.status(500).json({
-      message: '주간 일정 저장 중 오류가 발생했습니다.',
-    });
+  } catch (error) {
+    logger.error('주간 일정 저장 실패', error);
+    return res.status(500).json({ message: '주간 일정 저장 실패' });
   }
 };
