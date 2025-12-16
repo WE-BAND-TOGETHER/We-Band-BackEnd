@@ -15,6 +15,7 @@ export const redirectToKakaoLogin = (req: Request, res: Response) => {
 };
 
 // 🔥 카카오 로그인 (인가코드 → DB → JWT)
+// 🔥 카카오 로그인 (인가코드 → DB → JWT)
 export const kakaoLogin = async (req: Request, res: Response) => {
   try {
     const { code } = req.body;
@@ -25,7 +26,7 @@ export const kakaoLogin = async (req: Request, res: Response) => {
 
     const redirectUri = process.env.REDIRECT_URI!;
 
-    // 1️⃣ 카카오 Access Token 요청 (🔥 수정됨)
+    // 1️⃣ 카카오 Access Token 요청
     const tokenRes = await axios.post(
       'https://kauth.kakao.com/oauth/token',
       qs.stringify({
@@ -87,19 +88,14 @@ export const kakaoLogin = async (req: Request, res: Response) => {
     // 5️⃣ Refresh Token 쿠키 저장
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: true,
+      secure: true, // ⚠️ HTTPS 환경
       sameSite: 'none',
     });
 
-    // 6️⃣ 응답
-    return res.json({
+    // 6️⃣ 응답 (🔥 프론트 요구사항 충족)
+    return res.status(200).json({
       accessToken,
-      user: {
-        id: user.user_id,
-        email: user.email,
-        user_name: user.user_name,
-        profile_img: user.profile_img,
-      },
+      refreshToken,
     });
   } catch (error: any) {
     logger.error(
