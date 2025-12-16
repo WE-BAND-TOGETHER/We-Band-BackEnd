@@ -5,9 +5,6 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../types/authRequest';
 import { generateAccessToken, generateRefreshToken } from '../services/jwtServices';
 
-// ❌ (절대 쓰면 안됨) const prisma = new PrismaClient();
-// 이미 ../prisma 에서 PrismaClient 인스턴스 export 함
-
 // 카카오 로그인 페이지로 리디렉션
 export const redirectToKakaoLogin = (req: Request, res: Response) => {
   const redirectUri = process.env.REDIRECT_URI!;
@@ -16,22 +13,19 @@ export const redirectToKakaoLogin = (req: Request, res: Response) => {
   res.redirect(kakaoAuthUrl);
 };
 
-// 콜백 (테스트용)
-export const handleKakaoCallback = (req: Request, res: Response) => {
-  const { code } = req.query;
-  if (!code) {
-    return res.status(400).send('Authorization code not provided');
-  }
-  res.json({ authorization_code: code });
-};
-
-// 카카오 로그인 - 인가코드 → 액세스토큰
+// 🔥 카카오 로그인 (인가코드 → DB → JWT)
 export const kakaoLogin = async (req: Request, res: Response) => {
   try {
     const { code } = req.body;
+
+    if (!code) {
+      return res.status(400).json({ message: '인가 코드가 필요합니다.' });
+    }
+
     const redirectUri = process.env.REDIRECT_URI!;
 
-    const response = await axios.post(
+    // 1️⃣ 카카오 Access Token 요청
+    const tokenRes = await axios.post(
       'https://kauth.kakao.com/oauth/token',
       {},
       {
@@ -39,98 +33,78 @@ export const kakaoLogin = async (req: Request, res: Response) => {
           grant_type: 'authorization_code',
           client_id: process.env.REST_API_KEY,
           redirect_uri: redirectUri,
-          code: code,
+          code,
         },
       },
     );
 
-    const { token_type, access_token, expires_in, refresh_token, refresh_token_expires_in, scope } =
-      response.data;
+    const kakaoAccessToken = tokenRes.data.access_token;
 
-    res.json({
-      token_type,
-      access_token,
-      expires_in,
-      refresh_token,
-      refresh_token_expires_in,
-      scope,
-    });
-  } catch (error: any) {
-    logger.error('카카오 액세스 토큰 요청 실패: ' + (error.response?.data || error.message));
-    res.status(500).send('Token request failed');
-  }
-};
-
-// 카카오 사용자 정보 가져오기
-export const getKakaoUser = async (accessToken: string) => {
-  try {
-    const response = await axios.get('https://kapi.kakao.com/v2/user/me', {
-      headers: { Authorization: `Bearer ${accessToken}` },
+    // 2️⃣ 카카오 유저 정보 조회
+    const userRes = await axios.get('https://kapi.kakao.com/v2/user/me', {
+      headers: {
+        Authorization: `Bearer ${kakaoAccessToken}`,
+      },
     });
 
-    return response.data;
-  } catch (error: any) {
-    logger.error('카카오 사용자 정보 요청 실패:', error.response?.data || error.message);
-    throw new Error('Failed to retrieve user info');
-  }
-};
+    const { id: kakaoId, kakao_account, properties } = userRes.data;
 
-// DB 저장 + JWT 발급
-export const handleKakaoUser = async (req: Request, res: Response) => {
-  try {
-    const { kakaoAccessToken } = req.body;
-
-    const userInfo = await getKakaoUser(kakaoAccessToken);
-    const { id: kakaoId, kakao_account, properties } = userInfo;
-
-    const email = kakao_account.email;
-    const userName = properties.nickname || email.split('@')[0];
-    const profile_img = properties.profile_image || null;
-
-    let user = await prisma.weBandUser.findUnique({ where: { email } });
-
-    if (!user) {
-      user = await prisma.weBandUser.create({
-        data: {
-          kakao_id: BigInt(kakaoId),
-          email,
-          user_name: userName,
-          profile_img,
-        },
+    const email = kakao_account?.email;
+    if (!email) {
+      return res.status(400).json({
+        message: '카카오 이메일 제공 동의가 필요합니다.',
       });
-
-      logger.info(`새로운 사용자 생성: ${email}`);
-    } else {
-      logger.info(`기존 사용자 로그인: ${email}`);
     }
 
-    // JWT 발급
+    const userName = properties?.nickname ?? email.split('@')[0];
+    const profile_img = properties?.profile_image ?? null;
+
+    // 3️⃣ DB upsert
+    const user = await prisma.weBandUser.upsert({
+      where: { email },
+      update: {
+        kakao_id: BigInt(kakaoId),
+        user_name: userName,
+        profile_img,
+      },
+      create: {
+        kakao_id: BigInt(kakaoId),
+        email,
+        user_name: userName,
+        profile_img,
+      },
+    });
+
+    logger.info(`카카오 로그인 성공: ${email}`);
+
+    // 4️⃣ JWT 발급
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
 
-    // Refresh Token 쿠키 저장
+    // 5️⃣ Refresh Token 쿠키 저장
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: true,
       sameSite: 'none',
     });
 
-    res.json({
+    // 6️⃣ 응답
+    return res.json({
+      accessToken,
       user: {
         id: user.user_id,
-        kakao_id: user.kakao_id.toString(),
         email: user.email,
         user_name: user.user_name,
         profile_img: user.profile_img,
       },
-      accessToken,
     });
   } catch (error: any) {
-    logger.error('사용자 처리 실패: ' + error.message);
-    res.status(500).send('Failed to process user');
+    logger.error('카카오 로그인 실패:', error.response?.data || error.message);
+    return res.status(500).json({ message: '카카오 로그인 실패' });
   }
 };
 
+// 로그아웃
 export const logout = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
@@ -144,14 +118,15 @@ export const logout = async (req: AuthRequest, res: Response) => {
       expires: new Date(0),
     });
 
-    logger.debug('로그아웃 되었습니다.');
-    res.status(200).json({ message: '로그아웃 성공' });
+    logger.info(`로그아웃 완료: ${req.user.email}`);
+    return res.status(200).json({ message: '로그아웃 성공' });
   } catch (error: any) {
-    logger.error('로그아웃 실패: ' + error.message);
-    res.status(500).json({ message: '로그아웃 실패' });
+    logger.error('로그아웃 실패:', error.message);
+    return res.status(500).json({ message: '로그아웃 실패' });
   }
 };
 
+// 회원 탈퇴
 export const withdraw = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
@@ -161,15 +136,13 @@ export const withdraw = async (req: AuthRequest, res: Response) => {
     const userId = req.user.user_id;
 
     await prisma.weBandUser.delete({
-      where: {
-        user_id: userId,
-      },
+      where: { user_id: userId },
     });
 
     logger.info(`회원 탈퇴 완료: ${userId}`);
     return res.status(200).json({ message: '회원 탈퇴 성공' });
   } catch (error: any) {
-    logger.error('회원 탈퇴 실패: ' + error.message);
-    res.status(500).json({ message: '회원 탈퇴 실패' });
+    logger.error('회원 탈퇴 실패:', error.message);
+    return res.status(500).json({ message: '회원 탈퇴 실패' });
   }
 };
