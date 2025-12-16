@@ -39,10 +39,10 @@ const blocksToBinary = (blocks: number[]): Buffer => {
 /**
  * POST /meets
  * 모임 생성: group 생성 + owner를 member에 자동 가입
- * body:
+ * request body:
  * {
- *   "groupName": "스터디",
- *   "groupDate": "2025-12-16"   // 없으면 오늘 날짜로 처리
+ *   "meetName": "산학 회의",
+ *   "meetDate": "2025-03-22" // 모임 시작 날짜(7일 중 첫 날)
  * }
  */
 export const createMeet = async (req: AuthRequest, res: Response) => {
@@ -51,19 +51,23 @@ export const createMeet = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: '인증에 실패했습니다. 다시 로그인해주세요.' });
     }
 
-    const { groupName, groupDate } = req.body as { groupName?: string; groupDate?: string };
+    const { meetName, meetDate } = req.body as { meetName?: string; meetDate?: string };
 
-    if (!groupName || !groupName.trim()) {
-      return res.status(400).json({ message: 'groupName 값이 필요합니다.' });
+    if (!meetName || !meetName.trim()) {
+      return res.status(400).json({ message: '모임 이름이 올바르지 않습니다.' });
     }
 
-    const date = groupDate ? new Date(groupDate) : new Date();
+    if (!meetDate) {
+      return res.status(400).json({ message: 'meetDate 값이 필요합니다.' });
+    }
+
+    const date = new Date(meetDate);
     if (isNaN(date.getTime())) {
-      return res.status(400).json({ message: 'groupDate 형식이 올바르지 않습니다.' });
+      return res.status(400).json({ message: 'meetDate 형식이 올바르지 않습니다.' });
     }
 
     const created = await prisma.$transaction(async (tx) => {
-      // 🔹 1. 랜덤 groupId 생성 (중복 방지)
+      // 1. 랜덤 groupId 생성 (중복 방지)
       let groupId: number;
       while (true) {
         groupId = Math.floor(100000 + Math.random() * 900000);
@@ -73,17 +77,17 @@ export const createMeet = async (req: AuthRequest, res: Response) => {
         if (!exists) break;
       }
 
-      // 🔹 2. group 생성
+      // 2. group 생성
       const group = await tx.group.create({
         data: {
-          group_id: groupId, // ⭐ 핵심
-          group_name: groupName.trim(),
+          group_id: groupId,
+          group_name: meetName.trim(),
           group_date: date,
           owner_id: req.user!.user_id,
         },
       });
 
-      // 🔹 3. 생성자 자동 가입
+      // 3. 생성자 자동 가입
       await tx.member.create({
         data: {
           group_id: group.group_id,
@@ -94,14 +98,9 @@ export const createMeet = async (req: AuthRequest, res: Response) => {
       return group;
     });
 
-    return res.status(201).json({
-      message: '모임이 생성되었습니다.',
-      meet: {
-        groupId: created.group_id,
-        groupName: created.group_name,
-        groupDate: created.group_date.toISOString().split('T')[0],
-        ownerId: created.owner_id,
-      },
+    return res.status(200).json({
+      message: '모임이 성공적으로 생성되었습니다.',
+      meetId: created.group_id,
     });
   } catch (error: any) {
     logger.error('모임 생성 실패: ' + error.message);
@@ -137,6 +136,14 @@ export const getMyMeets = async (req: AuthRequest, res: Response) => {
       orderBy: { group_id: 'desc' },
     });
 
+    // owner 이름 조회
+    const ownerIds = Array.from(new Set(groups.map((g) => g.owner_id)));
+    const owners = await prisma.weBandUser.findMany({
+      where: { user_id: { in: ownerIds } },
+      select: { user_id: true, user_name: true },
+    });
+    const ownerNameMap = new Map(owners.map((o) => [o.user_id, o.user_name]));
+
     // 멤버 수까지
     const counts = await prisma.member.groupBy({
       by: ['group_id'],
@@ -147,11 +154,10 @@ export const getMyMeets = async (req: AuthRequest, res: Response) => {
     // countMap.get(group_id) = > 멤버 수 출력 
     return res.status(200).json({
       meets: groups.map((g) => ({
-        groupId: g.group_id,
-        groupName: g.group_name,
-        groupDate: g.group_date.toISOString().split('T')[0],
-        ownerId: g.owner_id,
+        meetId: g.group_id,
+        meetName: g.group_name,
         memberCount: countMap.get(g.group_id) ?? 0,
+        owner: ownerNameMap.get(g.owner_id) ?? '알 수 없음',
       })),
     });
   } catch (error: any) {
@@ -180,8 +186,9 @@ export const joinMeet = async (req: AuthRequest, res: Response) => {
       where: { group_id: meetId },
     });
 
-    if (!group) { // 모임이 없으면
-      return res.status(404).json({ message: '해당 모임을 찾을 수 없습니다.' });
+    if (!group) {
+      // 명세: 유효하지 않은 초대 코드
+      return res.status(400).json({ message: '유효하지 않은 초대 코드입니다.' });
     }
 
     // 중복 가입 방지: member PK(group_id, user_id)
@@ -195,12 +202,15 @@ export const joinMeet = async (req: AuthRequest, res: Response) => {
     } catch (e: any) {
       // Prisma unique/PK 충돌은 보통 P2002
       if (e?.code === 'P2002') {
-        return res.status(409).json({ message: '이미 가입된 모임입니다.' });
+        return res.status(200).json({ message: '이미 가입된 모임입니다.' });
       }
       throw e;
     }
 
-    return res.status(200).json({ message: '모임에 가입되었습니다.' });
+    return res.status(200).json({
+      message: '모임에 성공적으로 가입했습니다.',
+      meetId,
+    });
   } catch (error: any) {
     logger.error('모임 가입 실패: ' + error.message);
     return res.status(500).json({ message: '모임 가입 중 오류가 발생했습니다.' });
@@ -338,7 +348,7 @@ export const getMeetDetail = async (req: AuthRequest, res: Response) => {
  * owner 체크
  *
  * body 예시:
- * { "groupName": "새이름", "groupDate": "2025-12-20" }
+ * { "meetName": "새이름" }
  */
 export const updateMeet = async (req: AuthRequest, res: Response) => {
   try {
@@ -353,39 +363,30 @@ export const updateMeet = async (req: AuthRequest, res: Response) => {
 
     const group = await prisma.group.findUnique({ where: { group_id: meetId } });
     if (!group) {
-      return res.status(404).json({ message: '해당 모임을 찾을 수 없습니다.' });
+      return res.status(404).json({ message: '존재하지 않는 모임입니다.' });
     }
 
     if (group.owner_id !== req.user.user_id) {
-      return res.status(403).json({ message: '모임 수정 권한이 없습니다.' });
+      return res.status(403).json({ message: '모임 이름을 수정할 권한이 없습니다.' });
     }
 
-    const { groupName, groupDate } = req.body as { groupName?: string; groupDate?: string };
+    const { meetName } = req.body as { meetName?: string };
 
-    const data: any = {};
-    if (groupName !== undefined) {
-      if (!groupName.trim()) return res.status(400).json({ message: 'groupName 값이 올바르지 않습니다.' });
-      data.group_name = groupName.trim();
-    }
-    if (groupDate !== undefined) {
-      const date = new Date(groupDate);
-      if (isNaN(date.getTime())) return res.status(400).json({ message: 'groupDate 형식이 올바르지 않습니다.' });
-      data.group_date = date;
+    if (!meetName || !meetName.trim()) {
+      return res.status(400).json({ message: '모임 이름이 올바르지 않습니다.' });
     }
 
     const updated = await prisma.group.update({
       where: { group_id: meetId },
-      data,
+      data: {
+        group_name: meetName.trim(),
+      },
     });
 
     return res.status(200).json({
-      message: '모임 정보가 수정되었습니다.',
-      meet: {
-        groupId: updated.group_id,
-        groupName: updated.group_name,
-        groupDate: updated.group_date.toISOString().split('T')[0],
-        ownerId: updated.owner_id,
-      },
+      message: '모임 이름이 성공적으로 수정되었습니다.',
+      meetId: updated.group_id,
+      meetName: updated.group_name,
     });
   } catch (error: any) {
     logger.error('모임 수정 실패: ' + error.message);
@@ -410,11 +411,11 @@ export const deleteMeet = async (req: AuthRequest, res: Response) => {
 
     const group = await prisma.group.findUnique({ where: { group_id: meetId } });
     if (!group) {
-      return res.status(404).json({ message: '해당 모임을 찾을 수 없습니다.' });
+      return res.status(404).json({ message: '존재하지 않는 모임입니다.' });
     }
 
     if (group.owner_id !== req.user.user_id) {
-      return res.status(403).json({ message: '모임 삭제 권한이 없습니다.' });
+      return res.status(403).json({ message: '모임을 삭제할 권한이 없습니다.' });
     }
 
     await prisma.$transaction(async (tx) => {
@@ -422,7 +423,7 @@ export const deleteMeet = async (req: AuthRequest, res: Response) => {
       await tx.group.delete({ where: { group_id: meetId } });
     });
 
-    return res.status(200).json({ message: '모임이 삭제되었습니다.' });
+    return res.status(200).json({ message: '모임이 성공적으로 삭제되었습니다.' });
   } catch (error: any) {
     logger.error('모임 삭제 실패: ' + error.message);
     return res.status(500).json({ message: '모임 삭제 중 오류가 발생했습니다.' });
@@ -452,15 +453,16 @@ export const exitMeetOrKick = async (req: AuthRequest, res: Response) => {
 
     const group = await prisma.group.findUnique({ where: { group_id: meetId } });
     if (!group) {
-      return res.status(404).json({ message: '해당 모임을 찾을 수 없습니다.' });
+      return res.status(404).json({ message: '존재하지 않는 모임입니다.' });
     }
 
     const actorUserId = req.user.user_id;
     const isOwner = group.owner_id === actorUserId;
     const isSelf = actorUserId === targetUserId;
 
-    if (!isOwner && !isSelf) {
-      return res.status(403).json({ message: '권한이 없습니다.' });
+    // 명세: 타 멤버 탈퇴(=강퇴)는 OWNER만 가능
+    if (!isSelf && !isOwner) {
+      return res.status(403).json({ message: '멤버를 강퇴할 권한이 없습니다.' });
     }
 
     if (targetUserId === group.owner_id) {
@@ -477,7 +479,7 @@ export const exitMeetOrKick = async (req: AuthRequest, res: Response) => {
     });
 
     if (!targetMembership) {
-      return res.status(404).json({ message: '해당 사용자는 모임에 가입되어 있지 않습니다.' });
+      return res.status(404).json({ message: '강퇴 대상 멤버가 존재하지 않습니다.' });
     }
 
     await prisma.member.delete({
@@ -490,7 +492,8 @@ export const exitMeetOrKick = async (req: AuthRequest, res: Response) => {
     });
 
     return res.status(200).json({
-      message: isSelf ? '모임에서 탈퇴했습니다.' : '해당 사용자를 강퇴했습니다.',
+      message: isSelf ? '모임에서 성공적으로 탈퇴했습니다.' : '해당 멤버를 성공적으로 강퇴했습니다.',
+      removedUserId: targetUserId,
     });
   } catch (error: any) {
     logger.error('모임 탈퇴/강퇴 실패: ' + error.message);
