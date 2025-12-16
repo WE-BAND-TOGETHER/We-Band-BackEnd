@@ -35,7 +35,6 @@ const blocksToBinary = (blocks: number[]): Buffer => {
   return buffer;
 };
 
-
 /**
  * POST /meets
  * 모임 생성: group 생성 + owner를 member에 자동 가입
@@ -130,7 +129,7 @@ export const getMyMeets = async (req: AuthRequest, res: Response) => {
       _count: { _all: true },
     });
     const countMap = new Map(counts.map((c) => [c.group_id, c._count._all]));
-    // countMap.get(group_id) = > 멤버 수 출력 
+    // countMap.get(group_id) = > 멤버 수 출력
     return res.status(200).json({
       meets: groups.map((g) => ({
         groupId: g.group_id,
@@ -166,7 +165,8 @@ export const joinMeet = async (req: AuthRequest, res: Response) => {
       where: { group_id: meetId },
     });
 
-    if (!group) { // 모임이 없으면
+    if (!group) {
+      // 모임이 없으면
       return res.status(404).json({ message: '해당 모임을 찾을 수 없습니다.' });
     }
 
@@ -346,12 +346,14 @@ export const updateMeet = async (req: AuthRequest, res: Response) => {
 
     const data: any = {};
     if (groupName !== undefined) {
-      if (!groupName.trim()) return res.status(400).json({ message: 'groupName 값이 올바르지 않습니다.' });
+      if (!groupName.trim())
+        return res.status(400).json({ message: 'groupName 값이 올바르지 않습니다.' });
       data.group_name = groupName.trim();
     }
     if (groupDate !== undefined) {
       const date = new Date(groupDate);
-      if (isNaN(date.getTime())) return res.status(400).json({ message: 'groupDate 형식이 올바르지 않습니다.' });
+      if (isNaN(date.getTime()))
+        return res.status(400).json({ message: 'groupDate 형식이 올바르지 않습니다.' });
       data.group_date = date;
     }
 
