@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -16,7 +17,7 @@ model weBandUser {
 }
 
 model group {
-  group_id   Int      @id @default(autoincrement())
+  group_id   Int      @id //@default(autoincrement())
   group_name String
   group_date DateTime @db.Date
   owner_id   Int
