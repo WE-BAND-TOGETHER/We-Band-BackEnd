@@ -1,11 +1,9 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma';
 import { refreshAccessToken } from '../services/jwtServices';
 import { logger } from '../utils/logger';
 import { AuthRequest } from '../types/authRequest';
-
-const prisma = new PrismaClient();
 
 // 사용자 인증 미들웨어 (JWT 토큰)
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {

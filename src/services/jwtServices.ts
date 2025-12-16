@@ -1,10 +1,8 @@
 import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
 // 🚨 [핵심 수정]: Prisma Client 생성 경로를 '../generated/prisma'로 변경
 // (src/services 폴더에서 src/generated 폴더를 바라보는 상대 경로)
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma';
 import { logger } from '../utils/logger';
-
-const prisma = new PrismaClient();
 
 // ⭐ 1. 환경 변수 로딩 및 타입 안전성 확보
 const JWT_SECRET = process.env.JWT_SECRET;
