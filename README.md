@@ -1,18 +1,17 @@
 We-Band-BackEnd-main/
-│
 ├── .idea/                       # IDE 설정
 ├── logs/                        # 로그 파일
-├── prisma/                      # Prisma 스키마 (DB 모델 정의)
+├── prisma/                      # Prisma 스키마(DB 모델 정의)
 ├── src/                         # 백엔드 소스
 │   ├── controllers/             # 컨트롤러(요청/응답 처리)
 │   ├── middlewares/             # 미들웨어
-│   ├── routes/                  # 라우터(URL <-> Controller 연결)
+│   ├── routes/                  # 라우터(URL ↔ Controller 연결)
 │   ├── services/                # 서비스(비즈니스 로직)
 │   ├── types/                   # 타입 정의
 │   ├── utils/                   # 유틸리티 함수
 │   ├── index.ts                 # 서버 엔트리(Express 설정 + listen 4000)
 │   └── prisma.ts                # PrismaClient 생성(export const prisma)
-│── .env                         # 환경 변수 파일
+├── .env                         # 환경 변수 파일
 ├── .editorconfig                # 에디터 공통 코드 스타일 규칙
 ├── .gitattributes               # Git 파일 처리 규칙
 ├── .gitignore                   # Git에서 제외할 파일
